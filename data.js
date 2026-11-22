@@ -1,6 +1,6 @@
 import {
-  cloudEligibility, cloudLogin, cloudLogout, cloudStats, cloudSubmit, fetchJsonWithTimeout,
-} from './cloud.js?v=20261122-connect';
+  cloudEligibility, cloudLogin, cloudLogout, cloudSaveNote, cloudStats, cloudSubmit, fetchJsonWithTimeout,
+} from './cloud.js?v=20261122-notes';
 
 const loopback = location.hostname === 'localhost' || location.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(location.hostname);
 export const localMode = loopback && new URLSearchParams(location.search).get('backend') !== 'cloud';
@@ -51,6 +51,10 @@ export function logoutAdmin() {
 
 export function getAdminStats() {
   return localMode ? localRequest('admin/claims') : cloudStats();
+}
+
+export function saveAdminNote(details) {
+  return localMode ? localRequest('admin/notes', details) : cloudSaveNote(details);
 }
 
 // The first preview stored registrations in this browser. Only the signed-in

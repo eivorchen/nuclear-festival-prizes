@@ -137,18 +137,44 @@ export async function cloudLogout() {
   }
 }
 
-export async function cloudStats() {
+async function adminRequest(path, body) {
   projectUrl();
   const session = currentSession();
   if (!session) throw errorWithCode('UNAUTHORIZED', '请先登录管理员账号。');
-  const result = await request('/rest/v1/rpc/festival_admin_stats', {}, session.accessToken);
+  const result = await request('/rest/v1/rpc/' + path, body, session.accessToken);
   if (result.status === 401 || result.status === 403) {
     if (tabSession === session) saveSession(null);
     if (result.status === 403) throw errorWithCode('FORBIDDEN', '此账号没有管理员权限。');
     throw errorWithCode('UNAUTHORIZED', '登录已过期，请重新登录。');
   }
+  return result;
+}
+
+export async function cloudStats() {
+  const result = await adminRequest('festival_admin_stats', {});
   if (!result.ok) throw new Error('统计暂时无法读取，请稍后重试。');
   const data = result.data;
   if (!Array.isArray(data?.records)) throw new Error('统计数据格式异常，请联系活动负责人。');
   return data;
+}
+
+export async function cloudSaveNote({ name, note, previousNote }) {
+  const result = await adminRequest('festival_admin_save_note', {
+    p_name: name, p_note: note, p_previous_note: previousNote,
+  });
+  if (!result.ok) {
+    const code = result.data?.message;
+    if (code === 'NOTE_CONFLICT') {
+      throw errorWithCode(code, '备注已被修改，请刷新统计后再编辑。');
+    }
+    if (code === 'NOTE_NOT_FOUND') {
+      throw errorWithCode(code, '登记记录已不存在，请刷新统计。');
+    }
+    if (code === 'INVALID_NOTE') {
+      throw errorWithCode(code, '备注最多 300 个字符，请移除特殊控制字符。');
+    }
+    throw new Error('备注保存失败，请稍后重试。');
+  }
+  if (typeof result.data?.note !== 'string') throw new Error('备注返回异常，请刷新统计后核对。');
+  return result.data;
 }
