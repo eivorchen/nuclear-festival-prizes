@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="color-scheme" content="light">
+  <title>奖品领取登记 · 核能文化节</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="bar-inner">
+      <a href="#register" class="brand" aria-label="核能文化节，返回领取登记">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        核能文化节
+      </a>
+      <nav aria-label="主导航">
+        <a href="#register" id="nav-register" aria-current="page">领取登记</a>
+        <a href="#stats" id="nav-stats"><span class="chart-icon" aria-hidden="true"><i></i></span>领取统计</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="page">
+    <section id="register-view" aria-labelledby="register-title">
+      <div class="hero">
+        <div class="hero-copy">
+          <h1 id="register-title">奖品领取登记</h1>
+        </div>
+      </div>
+      <div class="entry">
+        <div class="fields">
+          <div class="field">
+            <label for="claim-name">领取人姓名</label>
+            <div class="input-wrap">
+              <span class="person-icon" aria-hidden="true"></span>
+              <input id="claim-name" type="text" autocomplete="off" name="recipient" placeholder="请输入姓名" maxlength="80" aria-describedby="name-error" required>
+            </div>
+            <p id="name-error" class="error" role="alert" hidden></p>
+          </div>
+          <div class="field">
+            <label for="claim-address">校内地址</label>
+            <div class="input-wrap">
+              <span class="pin-icon" aria-hidden="true"></span>
+              <input id="claim-address" type="text" autocomplete="off" name="campusAddress" placeholder="请输入宿舍楼或办公地点" maxlength="160" aria-describedby="address-error" required>
+            </div>
+            <p id="address-error" class="error" role="alert" hidden></p>
+          </div>
+          <div class="field">
+            <label for="claim-wechat">联系微信</label>
+            <div class="input-wrap">
+              <span class="chat-icon" aria-hidden="true"></span>
+              <input id="claim-wechat" type="text" autocomplete="off" name="wechat" placeholder="请输入微信号" maxlength="80" aria-describedby="wechat-error" required>
+            </div>
+            <p id="wechat-error" class="error" role="alert" hidden></p>
+          </div>
+        </div>
+        <section class="tier-section" aria-labelledby="tier-label">
+          <h2 id="tier-label">选择奖次</h2>
+          <div id="tiers" class="tier-grid"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="stats-view" aria-labelledby="stats-title" hidden>
+      <div class="stats-heading">
+        <h1 id="stats-title">领取统计</h1>
+        <div class="admin-actions" id="admin-actions" hidden>
+          <button id="refresh" type="button" class="quiet-button">刷新统计</button>
+          <button id="logout" type="button" class="quiet-button">退出登录</button>
+        </div>
+      </div>
+      <p id="stats-status" role="status" class="status-line"></p>
+      <button id="stats-retry" type="button" class="quiet-button" hidden>重试</button>
+      <form id="admin-login" class="login-card" hidden>
+        <h2>管理员登录</h2>
+        <label for="admin-account">管理员账号</label>
+        <input type="text" id="admin-account" name="username" autocomplete="username" required>
+        <label for="admin-password">密码</label>
+        <input type="password" id="admin-password" name="password" autocomplete="current-password" required>
+        <p class="error" role="alert" id="login-error" hidden></p>
+        <button class="primary-button" id="login-submit" type="submit">登录查看统计</button>
+      </form>
+      <div id="stats-body" hidden>
+        <div id="legacy-box" class="legacy-box" hidden>
+          <p id="legacy-info"></p>
+          <button id="legacy-import" class="quiet-button" type="button">导入旧记录</button>
+        </div>
+        <section aria-labelledby="summary-title">
+          <div class="procurement-heading">
+            <h2 id="summary-title">采购清单</h2>
+            <p id="order-total"></p>
+          </div>
+          <div id="summary"></div>
+        </section>
+        <section id="ledger-section" aria-labelledby="ledger-title" hidden>
+          <div class="ledger-heading"><h2 id="ledger-title">登记明细</h2></div>
+          <div id="ledger"></div>
+        </section>
+      </div>
+    </section>
+    <noscript>请启用浏览器的 JavaScript 后登记奖品。</noscript>
+  </main>
+
+  <dialog id="picker" aria-labelledby="picker-title">
+    <div id="selection-panel">
+      <div class="dialog-head">
+        <div><p id="picker-recipient" class="dialog-context"></p><h2 id="picker-title">选择奖品</h2></div>
+        <button id="picker-close" type="button" class="close-button" aria-label="关闭"></button>
+      </div>
+      <form id="prize-form">
+        <fieldset id="prize-options" aria-label="可领取的奖品"></fieldset>
+        <p id="picker-status" class="status-line" role="status"></p>
+        <p id="submit-error" class="error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button id="confirm" type="submit" class="primary-button" disabled>确认提交</button>
+        </div>
+      </form>
+    </div>
+    <section id="duplicate-panel" hidden>
+      <h2 id="duplicate-title">是否覆盖原登记？</h2>
+      <p id="duplicate-description"></p>
+      <div class="dialog-actions">
+        <button id="cancel-overwrite" type="button" class="quiet-button">取消</button>
+        <button id="confirm-overwrite" type="button" class="primary-button">确认覆盖</button>
+      </div>
+    </section>
+  </dialog>
+
+  <dialog id="success" aria-labelledby="success-title">
+    <div class="success-content">
+      <span class="success-check" aria-hidden="true"></span>
+      <h2 id="success-title">登记成功</h2>
+      <p id="receipt-name"></p>
+      <strong id="receipt-prize"></strong>
+      <button id="next" type="button" class="primary-button">完成</button>
+    </div>
+  </dialog>
+</body>
+</html>
