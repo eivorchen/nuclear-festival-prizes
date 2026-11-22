@@ -7,6 +7,13 @@ const claimErrors = {
   INVALID_PRIZE: '请选择当前奖次的奖品。',
   INVALID_NAME: '请输入姓名，最多 80 个字符。',
   INVALID_ADDRESS: '请输入校内地址，最多 160 个字符。',
+  INVALID_PHONE: '请输入有效的联系电话。',
+  INVALID_TIER: '该姓名不能选择这个奖次，请重新查询。',
+  INVALID_STATUS: '请选择领取奖品或放弃奖品。',
+  NOT_ELIGIBLE: '名单中没有找到该姓名，请核对姓名。',
+  CONTACT_MISMATCH: '已有登记。请填写原登记的联系电话，或联系活动负责人处理。',
+  LEGACY_CONTACT_MISMATCH: '已有登记。请填写原登记的联系微信，或联系活动负责人处理。',
+  CLIENT_OUTDATED: '请刷新页面，在新版登记表中提交。',
   INVALID_WECHAT: '请输入联系微信，最多 80 个字符。',
   INVALID_REQUEST: '这次登记的编号无效，请重新登记。',
   REQUEST_CONFLICT: '这次登记的编号已使用，请重新登记。',
@@ -59,10 +66,22 @@ async function request(path, body, token) {
   }
 }
 
-export async function cloudSubmit({ requestId, name, campusAddress, wechat, tierId, prizeId, confirmationToken }) {
+export async function cloudEligibility(name) {
+  const response = await request('/rest/v1/rpc/festival_lookup_award', { p_name: name });
+  if (!response.ok) throw new Error('暂时无法核对获奖名单，请稍后重试。');
+  const result = await response.json();
+  if (result === null) return null;
+  if (!Array.isArray(result.eligibleTierIds) || !result.eligibleTierIds.includes(result.awardTierId)) {
+    throw new Error('获奖信息格式异常，请联系活动负责人。');
+  }
+  return result;
+}
+
+export async function cloudSubmit({ requestId, name, campusAddress, wechat, tierId, prizeId, confirmationToken, phone, status }) {
   const response = await request('/rest/v1/rpc/festival_submit_claim', {
-    p_request_id: requestId, p_name: name, p_campus_address: campusAddress,
-    p_wechat: wechat, p_tier_id: tierId, p_prize_id: prizeId, p_confirmation_token: confirmationToken || null,
+    p_request_id: requestId, p_name: name, p_campus_address: campusAddress ?? null,
+    p_wechat: wechat ?? null, p_tier_id: tierId, p_prize_id: prizeId ?? null,
+    p_confirmation_token: confirmationToken ?? null, p_phone: phone ?? null, p_status: status ?? null,
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));

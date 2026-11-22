@@ -1,4 +1,4 @@
-import { cloudLogin, cloudLogout, cloudStats, cloudSubmit } from './cloud.js';
+import { cloudEligibility, cloudLogin, cloudLogout, cloudStats, cloudSubmit } from './cloud.js?v=20261122-roster';
 
 const loopback = location.hostname === 'localhost' || location.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(location.hostname);
 export const localMode = loopback && new URLSearchParams(location.search).get('backend') !== 'cloud';
@@ -34,6 +34,10 @@ async function localRequest(path, payload) {
 
 export function submitClaim(claim) {
   return localMode ? localRequest('claims', claim) : cloudSubmit(claim);
+}
+
+export function findEligibility(name) {
+  return localMode ? localRequest('eligibility', { name }) : cloudEligibility(name);
 }
 
 export function loginAdmin(account, password) {

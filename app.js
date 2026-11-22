@@ -1,18 +1,28 @@
 import { tiers } from './catalog.js';
-import { getAdminStats, importLegacyClaims, legacyCount, localMode, loginAdmin, logoutAdmin, submitClaim } from './data.js';
+import {
+  findEligibility, getAdminStats, importLegacyClaims, legacyCount, localMode,
+  loginAdmin, logoutAdmin, submitClaim,
+} from './data.js?v=20261122-roster';
 
 const byId = id => document.getElementById(id);
 const picker = byId('picker');
 const success = byId('success');
+const lookupButton = byId('lookup-name');
+const statusLine = byId('eligibility-status');
 const fields = [
-  { key: 'name', input: byId('claim-name'), error: byId('name-error'), label: '领取人姓名' },
+  { key: 'name', input: byId('claim-name'), error: byId('name-error'), label: '获奖人姓名' },
+  { key: 'phone', input: byId('claim-phone'), error: byId('phone-error'), label: '联系电话' },
   { key: 'campusAddress', input: byId('claim-address'), error: byId('address-error'), label: '校内地址' },
   { key: 'wechat', input: byId('claim-wechat'), error: byId('wechat-error'), label: '联系微信' },
 ];
+const nameField = fields[0];
 const allPrizes = tiers.flatMap(tier => tier.prizes);
+const tiersById = new Map(tiers.map(tier => [tier.id, tier]));
 const attemptKey = localMode ? 'festival-unconfirmed-claim' : 'festival-unconfirmed-claim-cloud';
-let currentTier;
-let selectedPrize;
+let eligibility;
+let lookupTimer;
+let lookupGeneration = 0;
+let selection;
 let pendingAttempt;
 let overwriteToken = null;
 let submitting = false;
@@ -30,53 +40,153 @@ function showError(element, message = '') {
   element.hidden = !message;
 }
 
-function claimDetails() {
-  return Object.fromEntries(fields.map(field => [field.key, field.input.value.trim()]));
+function setFieldError(field, message) {
+  showError(field.error, message);
+  if (message) field.input.setAttribute('aria-invalid', 'true');
+  else field.input.removeAttribute('aria-invalid');
 }
 
-function checkDetails() {
-  let invalid;
-  for (const field of fields) {
-    const missing = !field.input.value.trim();
-    showError(field.error, missing ? '请填写' + field.label + '。' : '');
-    field.input.setAttribute('aria-invalid', String(missing));
-    if (missing && !invalid) invalid = field.input;
+function claimDetails(status) {
+  const details = Object.fromEntries(fields.map(field => [field.key, field.input.value.trim()]));
+  if (status === 'waived') details.campusAddress = '';
+  return details;
+}
+
+function validPhone(value) {
+  let digits = value.replace(/[０-９＋]/g, character =>
+    character === '＋' ? '+' : String.fromCharCode(character.charCodeAt(0) - 0xfee0)
+  ).replace(/[\s()（）.．‐‑‒–—−-]/g, '');
+  if (/^(?:\+86|0086)1[3-9][0-9]{9}$/.test(digits)) digits = digits.slice(-11);
+  return /^\+?[0-9]{7,15}$/.test(digits);
+}
+
+function checkDetails(status) {
+  const details = claimDetails(status);
+  if (eligibility?.name !== details.name) return false;
+  let firstInvalid;
+  for (const field of fields.slice(1)) {
+    const required = field.key === 'phone' || status === 'claimed';
+    const missing = required && !details[field.key];
+    const badPhone = field.key === 'phone' && !missing && !validPhone(details.phone);
+    const message = missing ? '请填写' + field.label + '。' : badPhone ? '请输入有效的联系电话。' : '';
+    setFieldError(field, message);
+    if (message && !firstInvalid) firstInvalid = field.input;
   }
-  invalid?.focus();
-  return !invalid;
+  firstInvalid?.focus();
+  return !firstInvalid;
 }
 
-for (const field of fields) {
-  field.input.addEventListener('input', () => {
-    showError(field.error);
-    field.input.removeAttribute('aria-invalid');
+function clearEligibility() {
+  clearTimeout(lookupTimer);
+  ++lookupGeneration;
+  eligibility = undefined;
+  byId('eligible-actions').hidden = true;
+  byId('tiers').replaceChildren();
+  statusLine.textContent = '';
+  lookupButton.disabled = false;
+}
+
+function renderEligibleTiers() {
+  const buttons = eligibility.eligibleTierIds.map(id => {
+    const tier = tiersById.get(id);
+    const button = el('button', 'tier-button');
+    button.type = 'button';
+    button.setAttribute('aria-haspopup', 'dialog');
+    const medal = el('span', 'medal ' + tier.id);
+    medal.setAttribute('aria-hidden', 'true');
+    medal.append(el('span', 'coin'));
+    const label = el('span', 'tier-label');
+    const note = id === eligibility.awardTierId ? '原奖次' : '降一级选择';
+    label.append(el('strong', '', tier.name), el('small', '', note));
+    button.append(medal, label, el('span', 'chevron'));
+    button.addEventListener('click', () => {
+      if (checkDetails('claimed')) openPicker(tier);
+    });
+    return button;
   });
+  byId('tiers').replaceChildren(...buttons);
+  byId('eligible-actions').hidden = false;
+}
+
+async function lookupEligibility() {
+  const name = nameField.input.value.trim();
+  if (!name) {
+    clearEligibility();
+    setFieldError(nameField, '请填写获奖人姓名。');
+    nameField.input.focus();
+    return;
+  }
+  if (lookupButton.disabled || eligibility?.name === name) return;
+
+  clearEligibility();
+  setFieldError(nameField, '');
+  const generation = lookupGeneration;
+  lookupButton.disabled = true;
+  statusLine.textContent = '正在核对获奖名单…';
+  try {
+    const result = await findEligibility(name);
+    if (generation !== lookupGeneration) return;
+    if (!result) {
+      statusLine.textContent = '';
+      setFieldError(nameField, '名单中未找到该姓名，请核对后重试。');
+      return;
+    }
+    const award = tiersById.get(result.awardTierId);
+    if (!award || !Array.isArray(result.eligibleTierIds) ||
+        !result.eligibleTierIds.length || !result.eligibleTierIds.every(id => tiersById.has(id))) {
+      throw new Error('暂时无法读取奖项，请联系活动负责人。');
+    }
+    eligibility = { ...result, name };
+    statusLine.textContent = '已匹配' + award.name;
+    renderEligibleTiers();
+  } catch (error) {
+    if (generation !== lookupGeneration) return;
+    statusLine.textContent = '';
+    setFieldError(nameField, error.message);
+  } finally {
+    if (generation === lookupGeneration) lookupButton.disabled = false;
+  }
+}
+
+nameField.input.addEventListener('input', event => {
+  clearEligibility();
+  setFieldError(nameField, '');
+  if (!event.isComposing && nameField.input.value.trim().length >= 2) {
+    lookupTimer = setTimeout(lookupEligibility, 450);
+  }
+});
+nameField.input.addEventListener('compositionend', () => {
+  clearTimeout(lookupTimer);
+  if (nameField.input.value.trim().length >= 2) lookupTimer = setTimeout(lookupEligibility, 450);
+});
+byId('eligibility-form').addEventListener('submit', event => {
+  event.preventDefault();
+  clearTimeout(lookupTimer);
+  lookupEligibility();
+});
+
+for (const [index, field] of fields.entries()) {
+  if (!index) continue;
+  field.input.addEventListener('input', () => setFieldError(field, ''));
   field.input.addEventListener('keydown', event => {
     if (event.key !== 'Enter' || event.isComposing) return;
     event.preventDefault();
-    const nextField = fields[fields.indexOf(field) + 1];
-    (nextField?.input ?? byId('tiers').firstElementChild).focus();
+    const nextField = fields[index + 1];
+    (nextField?.input ?? byId('tiers').firstElementChild)?.focus();
   });
 }
 
-for (const tier of tiers) {
-  const button = el('button', 'tier-button');
-  button.type = 'button';
-  button.setAttribute('aria-haspopup', 'dialog');
-  const medal = el('span', 'medal ' + tier.id);
-  medal.setAttribute('aria-hidden', 'true');
-  medal.append(el('span', 'coin'));
-  const label = el('span', 'tier-label');
-  label.append(el('strong', '', tier.name), el('small', '', tier.prizes.length + ' 款奖品'));
-  button.append(medal, label, el('span', 'chevron'));
-  button.addEventListener('click', () => { if (checkDetails()) openPicker(tier); });
-  byId('tiers').append(button);
+function draftSelection() {
+  return {
+    ...claimDetails(selection.status),
+    status: selection.status,
+    tierId: selection.tier.id,
+    prizeId: selection.prize?.id ?? null,
+  };
 }
 
-function matchesAttempt(prizeId) {
-  const details = claimDetails();
-  return pendingAttempt?.prizeId === prizeId && pendingAttempt.tierId === currentTier?.id &&
-    fields.every(field => pendingAttempt[field.key] === details[field.key]);
+function matchesAttempt(draft) {
+  return pendingAttempt && Object.keys(draft).every(key => draft[key] === pendingAttempt[key]);
 }
 
 function rememberAttempt(attempt) {
@@ -87,35 +197,37 @@ function rememberAttempt(attempt) {
   } catch { /* In-memory retries still share the request ID. */ }
 }
 
-function showPrizeOptions() {
+function showPanel(panel) {
+  byId('selection-panel').hidden = panel !== 'selection';
+  byId('waiver-panel').hidden = panel !== 'waiver';
+  byId('duplicate-panel').hidden = panel !== 'duplicate';
+  picker.setAttribute('aria-labelledby', (panel === 'selection' ? 'picker' : panel) + '-title');
+  if (panel === 'selection') picker.removeAttribute('aria-describedby');
+  else picker.setAttribute('aria-describedby', panel + '-description');
+}
+
+function showSelection() {
   overwriteToken = null;
-  byId('duplicate-panel').hidden = true;
-  byId('selection-panel').hidden = false;
-  picker.setAttribute('aria-labelledby', 'picker-title');
-  picker.removeAttribute('aria-describedby');
+  showPanel(selection.status === 'waived' ? 'waiver' : 'selection');
 }
 
 function askToOverwrite(error, previousConfirmation) {
   overwriteToken = error.confirmationToken;
   const intro = previousConfirmation ? '上一次确认已失效，请重新确认。' : '';
-  const description = error.matchCount > 1
-    ? '这个姓名已有 ' + error.matchCount + ' 条登记。确认后将合并为一条，以本次选择的奖品、校内地址和联系微信为准。'
-    : '你已经提交过一次。确认后，原登记的奖品、校内地址和联系微信将更新为本次填写的内容。';
-  byId('duplicate-description').textContent = intro + description;
-  byId('selection-panel').hidden = true;
-  byId('duplicate-panel').hidden = false;
-  picker.setAttribute('aria-labelledby', 'duplicate-title');
-  picker.setAttribute('aria-describedby', 'duplicate-description');
+  const current = error.matchCount > 1 ? '这个姓名已有 ' + error.matchCount + ' 条登记。' : '你已经提交过一次。';
+  const result = selection.status === 'waived'
+    ? '确认后将登记为已放弃。'
+    : '确认后将以本次填写的领取信息和所选奖品为准。';
+  byId('duplicate-description').textContent = intro + current + result;
+  showPanel('duplicate');
 }
 
 function openPicker(tier) {
-  showPrizeOptions();
-  currentTier = tier;
-  selectedPrize = null;
+  selection = { tier, status: 'claimed' };
+  showSelection();
   byId('picker-title').textContent = '选择' + tier.name + '奖品';
-  byId('picker-recipient').textContent = '领取人　' + fields[0].input.value.trim();
+  byId('picker-recipient').textContent = '获奖人　' + eligibility.name;
   showError(byId('submit-error'));
-  picker.showModal();
   const options = byId('prize-options');
   options.replaceChildren();
   for (const prize of tier.prizes) {
@@ -129,12 +241,12 @@ function openPicker(tier) {
     radio.type = 'radio';
     radio.name = 'prize';
     radio.value = prize.id;
-    if (matchesAttempt(prize.id)) {
-      selectedPrize = prize;
+    if (matchesAttempt({ ...draftSelection(), prizeId: prize.id })) {
+      selection.prize = prize;
       radio.checked = true;
     }
     radio.addEventListener('change', () => {
-      selectedPrize = prize;
+      selection.prize = prize;
       byId('confirm').disabled = false;
       byId('picker-status').textContent = '';
       showError(byId('submit-error'));
@@ -142,17 +254,36 @@ function openPicker(tier) {
     option.append(img, text, radio);
     options.append(option);
   }
-  byId('confirm').disabled = !selectedPrize;
-  byId('picker-status').textContent = selectedPrize ? '上次提交结果待确认，请再次提交。' : '';
+  byId('confirm').disabled = !selection.prize;
+  byId('picker-status').textContent = selection.prize ? '上次提交结果待确认，请再次提交。' : '';
+  picker.showModal();
 }
 
+function openWaiver() {
+  selection = { status: 'waived', tier: tiersById.get(eligibility.awardTierId) };
+  showSelection();
+  byId('waiver-description').textContent = matchesAttempt(draftSelection())
+    ? '上次提交结果待确认，请再次确认放弃。'
+    : '提交后将登记为已放弃。';
+  showError(byId('waiver-error'));
+  picker.showModal();
+  byId('cancel-waiver').focus();
+}
+
+byId('waive-prize').addEventListener('click', () => {
+  if (checkDetails('waived')) openWaiver();
+});
 byId('picker-close').addEventListener('click', () => picker.close());
+byId('cancel-waiver').addEventListener('click', () => picker.close());
+
 function cancelOverwrite() {
-  showPrizeOptions();
+  showSelection();
   rememberAttempt(null);
   byId('picker-status').textContent = '';
-  byId('confirm').focus();
+  if (selection.status === 'waived') picker.close();
+  else byId('confirm').focus();
 }
+
 picker.addEventListener('cancel', event => {
   if (submitting || overwriteToken) event.preventDefault();
   if (!submitting && overwriteToken) cancelOverwrite();
@@ -165,65 +296,71 @@ byId('prize-form').addEventListener('submit', event => {
   event.preventDefault();
   if (!overwriteToken) sendSelection();
 });
+byId('confirm-waiver').addEventListener('click', () => sendSelection());
 
 async function sendSelection(confirmationToken) {
-  if (submitting || !selectedPrize) return;
-  const prize = selectedPrize;
-  const tier = currentTier;
-  const attempt = matchesAttempt(prize.id) ? pendingAttempt : {
-    requestId: crypto.randomUUID(), ...claimDetails(), tierId: tier.id, prizeId: prize.id,
-  };
+  if (submitting || (selection.status === 'claimed' && !selection.prize)) return;
+  const waived = selection.status === 'waived';
+  const draft = draftSelection();
+  const attempt = matchesAttempt(draft) ? pendingAttempt : { requestId: crypto.randomUUID(), ...draft };
   rememberAttempt(attempt);
   submitting = true;
-  byId('confirm').disabled = true;
-  const action = byId(confirmationToken ? 'confirm-overwrite' : 'confirm');
+  const action = byId(confirmationToken ? 'confirm-overwrite' : waived ? 'confirm-waiver' : 'confirm');
+  const actionText = action.textContent;
+  const controls = ['confirm', 'confirm-waiver', 'cancel-waiver', 'confirm-overwrite', 'cancel-overwrite', 'picker-close', 'prize-options'].map(byId);
+  controls.forEach(control => { control.disabled = true; });
   action.textContent = '提交中…';
-  byId('confirm-overwrite').disabled = true;
-  byId('cancel-overwrite').disabled = true;
-  byId('picker-close').disabled = true;
-  byId('prize-options').disabled = true;
   byId('picker-status').textContent = '';
-  showError(byId('submit-error'));
+  const submitError = byId(waived ? 'waiver-error' : 'submit-error');
+  showError(submitError);
   try {
-    // Persist only the request ID and form values. A page reload must never
-    // submit a replacement without the user's explicit confirmation.
+    // Restoring a pending request never restores an overwrite confirmation.
     await submitClaim(confirmationToken ? { ...attempt, confirmationToken } : attempt);
     rememberAttempt(null);
-    byId('success-title').textContent = confirmationToken ? '登记已更新' : '登记成功';
-    byId('receipt-name').textContent = attempt.name + '　' + tier.name;
-    byId('receipt-prize').textContent = prize.name;
+    byId('success-title').textContent = waived ? '已登记放弃奖品' : confirmationToken ? '登记已更新' : '登记成功';
+    byId('receipt-name').textContent = attempt.name + '　' + selection.tier.name;
+    byId('receipt-prize').hidden = waived;
+    byId('receipt-prize').textContent = selection.prize?.name ?? '';
     picker.close();
-    fields.forEach(field => { field.input.value = ''; });
+    fields.forEach(field => {
+      field.input.value = '';
+      setFieldError(field, '');
+    });
+    clearEligibility();
     success.showModal();
   } catch (error) {
     if (error.code === 'DUPLICATE_NAME' && typeof error.confirmationToken === 'string' && error.confirmationToken) {
       askToOverwrite(error, Boolean(confirmationToken));
     } else {
-      showPrizeOptions();
-      showError(byId('submit-error'), error.message);
+      showSelection();
+      const contactMismatch = ['CONTACT_MISMATCH', 'LEGACY_CONTACT_MISMATCH'].includes(error.code);
+      const guidance = contactMismatch ? '请返回登记页核对后重试。' : '';
+      showError(submitError, error.message + guidance);
       if (['REQUEST_CONFLICT', 'INVALID_REQUEST'].includes(error.code)) rememberAttempt(null);
     }
   } finally {
     submitting = false;
-    byId('confirm').disabled = false;
-    byId('confirm').textContent = '确认提交';
-    byId('confirm-overwrite').textContent = '确认覆盖';
-    byId('confirm-overwrite').disabled = false;
-    byId('cancel-overwrite').disabled = false;
-    byId('picker-close').disabled = false;
-    byId('prize-options').disabled = false;
-    if (picker.open) byId(overwriteToken ? 'cancel-overwrite' : 'confirm').focus();
+    action.textContent = actionText;
+    controls.forEach(control => { control.disabled = false; });
+    if (picker.open) byId(overwriteToken ? 'cancel-overwrite' : waived ? 'confirm-waiver' : 'confirm').focus();
   }
 }
+
 byId('next').addEventListener('click', () => success.close());
 success.addEventListener('close', () => {
-  if (!byId('register-view').hidden) fields[0].input.focus({ preventScroll: true });
+  if (!byId('register-view').hidden) nameField.input.focus({ preventScroll: true });
 });
 
 function renderSummary(records) {
   const counts = new Map(allPrizes.map(prize => [prize.id, 0]));
-  for (const record of records) counts.set(record.prizeId, (counts.get(record.prizeId) || 0) + 1);
-  byId('order-total').textContent = '共登记 ' + records.length + ' 份';
+  for (const record of records) {
+    if (record.status !== 'waived' && counts.has(record.prizeId)) {
+      counts.set(record.prizeId, counts.get(record.prizeId) + 1);
+    }
+  }
+  const total = [...counts.values()].reduce((sum, count) => sum + count, 0);
+  const waived = records.filter(record => record.status === 'waived').length;
+  byId('order-total').textContent = '需采购 ' + total + ' 份' + (waived ? ' · 已放弃 ' + waived + ' 人' : '');
   byId('summary').replaceChildren(...tiers.map(tier => {
     const group = el('div', 'summary-group');
     group.append(el('h3', '', tier.name));
@@ -248,7 +385,7 @@ function renderLedger(records) {
   const table = el('table');
   table.setAttribute('aria-label', '登记明细');
   const header = table.createTHead().insertRow();
-  for (const title of ['姓名', '校内地址', '联系微信', '奖次', '奖品', '登记时间']) {
+  for (const title of ['姓名', '联系电话', '校内地址', '联系微信', '获奖奖次', '所选奖次', '奖品', '状态', '登记时间']) {
     const th = el('th', '', title);
     th.scope = 'col';
     header.append(th);
@@ -256,11 +393,16 @@ function renderLedger(records) {
   const body = table.createTBody();
   for (const record of records) {
     const row = body.insertRow();
-    const tier = tiers.find(item => item.id === record.tierId);
+    const tier = tiersById.get(record.tierId);
+    const award = tiersById.get(record.awardTierId);
     const prize = tier?.prizes.find(item => item.id === record.prizeId);
-    for (const value of [record.name, record.campusAddress || '—', record.wechat || '—', tier?.name, prize?.name, displayTime.format(new Date(record.createdAt))]) {
-      row.insertCell().textContent = value;
-    }
+    const waived = record.status === 'waived';
+    const cells = [
+      record.name, record.phone, record.campusAddress, record.wechat, award?.name,
+      waived ? '' : tier?.name, waived ? '' : prize?.name,
+      waived ? '已放弃' : '已登记领取', displayTime.format(new Date(record.createdAt)),
+    ];
+    for (const value of cells) row.insertCell().textContent = value || '—';
   }
   ledger.append(table);
 }
@@ -398,15 +540,28 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('hashchange', showView);
 showView();
 
-try {
-  const saved = JSON.parse(sessionStorage.getItem(attemptKey));
-  const tier = tiers.find(item => item.id === saved?.tierId);
-  if (tier?.prizes.some(prize => prize.id === saved.prizeId) &&
-      fields.every(field => typeof saved[field.key] === 'string' && saved[field.key].trim())) {
+async function restoreAttempt() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(attemptKey));
+    const tier = tiersById.get(saved?.tierId);
+    const validChoice = saved?.status === 'waived'
+      ? saved.prizeId === null
+      : saved?.status === 'claimed' && tier?.prizes.some(prize => prize.id === saved.prizeId);
+    if (!tier || !validChoice || !saved.name || !saved.phone || byId('register-view').hidden) return;
     pendingAttempt = saved;
-    if (!byId('register-view').hidden) {
-      fields.forEach(field => { field.input.value = saved[field.key]; });
+    fields.forEach(field => { field.input.value = saved[field.key] || ''; });
+    await lookupEligibility();
+    if (pendingAttempt !== saved || byId('register-view').hidden || !eligibility ||
+        !eligibility.eligibleTierIds.includes(tier.id) || eligibility.name !== saved.name) return;
+    if (saved.status === 'waived' && eligibility.awardTierId === tier.id &&
+        matchesAttempt({ ...claimDetails('waived'), status: 'waived', tierId: tier.id, prizeId: null })) {
+      openWaiver();
+    }
+    if (saved.status === 'claimed' &&
+        matchesAttempt({ ...claimDetails('claimed'), status: 'claimed', tierId: tier.id, prizeId: saved.prizeId })) {
       openPicker(tier);
     }
-  }
-} catch { /* The form also works without session storage. */ }
+  } catch { /* The form also works without session storage. */ }
+}
+
+restoreAttempt();

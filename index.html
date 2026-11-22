@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="light">
   <title>奖品领取登记 · 核能文化节</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css">
-  <script type="module" src="./app.js"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261122-roster">
+  <script type="module" src="./app.js?v=20261122-roster"></script>
 </head>
 <body>
   <header class="topbar">
@@ -32,36 +32,53 @@
         </div>
       </div>
       <div class="entry">
-        <div class="fields">
-          <div class="field">
-            <label for="claim-name">领取人姓名</label>
+        <form id="eligibility-form" class="name-lookup" novalidate>
+          <label for="claim-name">获奖人姓名</label>
+          <div class="lookup-row">
             <div class="input-wrap">
               <span class="person-icon" aria-hidden="true"></span>
-              <input id="claim-name" type="text" autocomplete="off" name="recipient" placeholder="请输入姓名" maxlength="80" aria-describedby="name-error" required>
+              <input id="claim-name" type="text" autocomplete="off" name="recipient" placeholder="请输入获奖名单上的姓名" maxlength="80" aria-describedby="name-error eligibility-status" required>
             </div>
-            <p id="name-error" class="error" role="alert" hidden></p>
+            <button id="lookup-name" type="submit" class="primary-button">查找奖项</button>
           </div>
-          <div class="field">
-            <label for="claim-address">校内地址</label>
-            <div class="input-wrap">
-              <span class="pin-icon" aria-hidden="true"></span>
-              <input id="claim-address" type="text" autocomplete="off" name="campusAddress" placeholder="请输入宿舍楼或办公地点" maxlength="160" aria-describedby="address-error" required>
+          <p id="name-error" class="error" role="alert" hidden></p>
+          <p id="eligibility-status" class="status-line" role="status"></p>
+        </form>
+        <div id="eligible-actions" hidden>
+          <div class="fields">
+            <div class="field">
+              <label for="claim-phone">联系电话</label>
+              <div class="input-wrap">
+                <span class="phone-icon" aria-hidden="true"></span>
+                <input id="claim-phone" type="tel" autocomplete="tel" name="phone" placeholder="请输入联系电话" maxlength="32" aria-describedby="phone-error" required>
+              </div>
+              <p id="phone-error" class="error" role="alert" hidden></p>
             </div>
-            <p id="address-error" class="error" role="alert" hidden></p>
-          </div>
-          <div class="field">
-            <label for="claim-wechat">联系微信</label>
-            <div class="input-wrap">
-              <span class="chat-icon" aria-hidden="true"></span>
-              <input id="claim-wechat" type="text" autocomplete="off" name="wechat" placeholder="请输入微信号" maxlength="80" aria-describedby="wechat-error" required>
+            <div class="field">
+              <label for="claim-address">校内地址</label>
+              <div class="input-wrap">
+                <span class="pin-icon" aria-hidden="true"></span>
+                <input id="claim-address" type="text" autocomplete="off" name="campusAddress" placeholder="请输入宿舍楼或办公地点" maxlength="160" aria-describedby="address-error">
+              </div>
+              <p id="address-error" class="error" role="alert" hidden></p>
             </div>
-            <p id="wechat-error" class="error" role="alert" hidden></p>
+            <div class="field">
+              <label for="claim-wechat">联系微信</label>
+              <div class="input-wrap">
+                <span class="chat-icon" aria-hidden="true"></span>
+                <input id="claim-wechat" type="text" autocomplete="off" name="wechat" placeholder="请输入微信号" maxlength="80" aria-describedby="wechat-error">
+              </div>
+              <p id="wechat-error" class="error" role="alert" hidden></p>
+            </div>
           </div>
+          <section class="tier-section" aria-labelledby="tier-label">
+            <div class="selection-heading">
+              <h2 id="tier-label">选择奖品</h2>
+              <button id="waive-prize" type="button" class="text-button" aria-haspopup="dialog">放弃奖品</button>
+            </div>
+            <div id="tiers" class="tier-grid"></div>
+          </section>
         </div>
-        <section class="tier-section" aria-labelledby="tier-label">
-          <h2 id="tier-label">选择奖次</h2>
-          <div id="tiers" class="tier-grid"></div>
-        </section>
       </div>
     </section>
 
@@ -98,7 +115,7 @@
         </section>
         <section id="ledger-section" aria-labelledby="ledger-title" hidden>
           <div class="ledger-heading"><h2 id="ledger-title">登记明细</h2></div>
-          <div id="ledger"></div>
+          <div id="ledger" tabindex="0" aria-label="登记明细表，可横向滚动"></div>
         </section>
       </div>
     </section>
@@ -120,7 +137,16 @@
         </div>
       </form>
     </div>
-    <section id="duplicate-panel" hidden>
+    <section id="waiver-panel" class="confirm-panel" hidden>
+      <h2 id="waiver-title">确认放弃奖品？</h2>
+      <p id="waiver-description">提交后将登记为已放弃。</p>
+      <p id="waiver-error" class="error" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button id="cancel-waiver" type="button" class="quiet-button">返回</button>
+        <button id="confirm-waiver" type="button" class="primary-button">确认放弃</button>
+      </div>
+    </section>
+    <section id="duplicate-panel" class="confirm-panel" hidden>
       <h2 id="duplicate-title">是否覆盖原登记？</h2>
       <p id="duplicate-description"></p>
       <div class="dialog-actions">
