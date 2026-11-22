@@ -8,6 +8,7 @@ const claimErrors = {
   INVALID_NAME: '请输入姓名，最多 80 个字符。',
   INVALID_ADDRESS: '请输入校内地址，最多 160 个字符。',
   INVALID_PHONE: '请输入有效的联系电话。',
+  INVALID_PRIZE_NOTE: '奖品备注请填写一行，最多 100 个字符。',
   INVALID_TIER: '该姓名不能选择这个奖次，请重新查询。',
   INVALID_STATUS: '请选择领取奖品或放弃奖品。',
   NOT_ELIGIBLE: '名单中没有找到该姓名，请核对姓名。',
@@ -91,11 +92,14 @@ export async function cloudEligibility(name) {
   return result;
 }
 
-export async function cloudSubmit({ requestId, name, campusAddress, wechat, tierId, prizeId, confirmationToken, phone, status }) {
+export async function cloudSubmit({
+  requestId, name, campusAddress, wechat, tierId, prizeId, confirmationToken, phone, status, prizeNote,
+}) {
   const response = await request('/rest/v1/rpc/festival_submit_claim', {
     p_request_id: requestId, p_name: name, p_campus_address: campusAddress ?? null,
     p_wechat: wechat ?? null, p_tier_id: tierId, p_prize_id: prizeId ?? null,
     p_confirmation_token: confirmationToken ?? null, p_phone: phone ?? null, p_status: status ?? null,
+    ...(status === 'claimed' && prizeNote ? { p_prize_note: prizeNote } : {}),
   });
   if (!response.ok) {
     const detail = response.data ?? {};

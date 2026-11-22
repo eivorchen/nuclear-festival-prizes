@@ -100,14 +100,15 @@ body:has(dialog[open]) { overflow: hidden; }
 .close-button::before, .close-button::after { content: ''; position: absolute; left: 9px; top: 15px; height: 1.5px; width: 14px; background: #656370; border-radius: 2px; transform: rotate(45deg); }
 .close-button::after { transform: rotate(-45deg); }
 #prize-options { padding: 0; border: 0; display: grid; gap: 10px; margin-top: 22px; min-width: 0; }
+.prize-note-field { margin-top: 18px; }
+.prize-note-field label { font-size: 15px; }
+.prize-note-field .input-wrap { height: 46px; margin-top: 7px; }
 .option { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 13px; padding: 10px; cursor: pointer; }
 .option:has(input:checked) { border-color: #8470ad; background: #f7f5fb; box-shadow: inset 0 0 0 1px #8470ad; }
 .option:has(input:disabled) { color: #85828b; cursor: default; background: #f8f8fa; }
 .option:has(input:disabled) img { filter: grayscale(1); opacity: .6; }
 .option img { width: 62px; height: 62px; border-radius: 8px; object-fit: cover; background: #ededf1; }
-.option-text { display: grid; gap: 4px; }
-.option-text strong { font-size: 16px; font-weight: 600; }
-.option-text small { font-size: 13px; color: var(--muted); font-weight: 400; }
+.option-text { font-size: 16px; font-weight: 600; }
 .option input { width: 19px; height: 19px; margin: 0 6px 0 auto; flex: 0 0 19px; accent-color: var(--violet); }
 .dialog-actions { display: flex; gap: 10px; margin-top: 22px; }
 .confirm-panel h2 { font-size: 25px; line-height: 1.4; letter-spacing: -.04em; }

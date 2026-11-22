@@ -1,12 +1,13 @@
-import { tiers } from './catalog.js';
+import { tiers } from './catalog.js?v=20261122-prize-remark';
 import {
   findEligibility, getAdminStats, importLegacyClaims, legacyCount, localMode,
   loginAdmin, logoutAdmin, submitClaim,
-} from './data.js?v=20261122-connect';
+} from './data.js?v=20261122-prize-remark';
 
 const byId = id => document.getElementById(id);
 const picker = byId('picker');
 const success = byId('success');
+const prizeNoteInput = byId('prize-note');
 const lookupButton = byId('lookup-name');
 const statusLine = byId('eligibility-status');
 const fields = [
@@ -23,6 +24,7 @@ let eligibility;
 let lookupTimer;
 let lookupGeneration = 0;
 let selection;
+let prizeNoteOwner;
 let pendingAttempt;
 let overwriteToken = null;
 let submitting = false;
@@ -182,6 +184,7 @@ function draftSelection() {
     status: selection.status,
     tierId: selection.tier.id,
     prizeId: selection.prize?.id ?? null,
+    prizeNote: selection.status === 'claimed' ? prizeNoteInput.value.trim() : '',
   };
 }
 
@@ -231,7 +234,11 @@ function askToOverwrite(error, previousConfirmation) {
   showPanel('duplicate');
 }
 
-function openPicker(tier) {
+function openPicker(tier, restoredNote) {
+  const noteOwner = eligibility.name + '\n' + tier.id;
+  if (restoredNote !== undefined) prizeNoteInput.value = restoredNote;
+  else if (prizeNoteOwner !== noteOwner) prizeNoteInput.value = '';
+  prizeNoteOwner = noteOwner;
   selection = { tier, status: 'claimed' };
   showSelection();
   byId('picker-title').textContent = '选择' + tier.name + '奖品';
@@ -244,8 +251,7 @@ function openPicker(tier) {
     const img = el('img');
     img.alt = '';
     img.src = prize.image;
-    const text = el('span', 'option-text');
-    text.append(el('strong', '', prize.name), el('small', '', prize.detail));
+    const text = el('strong', 'option-text', prize.name);
     const radio = el('input');
     radio.type = 'radio';
     radio.name = 'prize';
@@ -314,7 +320,7 @@ async function sendSelection(confirmationToken) {
   submitting = true;
   const action = byId(confirmationToken ? 'confirm-overwrite' : waived ? 'confirm-waiver' : 'confirm');
   const actionText = action.textContent;
-  const controls = ['confirm', 'confirm-waiver', 'cancel-waiver', 'confirm-overwrite', 'cancel-overwrite', 'picker-close', 'prize-options'].map(byId);
+  const controls = ['confirm', 'confirm-waiver', 'cancel-waiver', 'confirm-overwrite', 'cancel-overwrite', 'picker-close', 'prize-options', 'prize-note'].map(byId);
   controls.forEach(control => { control.disabled = true; });
   action.textContent = '提交中…';
   byId('picker-status').textContent = '';
@@ -335,6 +341,8 @@ async function sendSelection(confirmationToken) {
       field.input.value = '';
       setFieldError(field, '');
     });
+    prizeNoteInput.value = '';
+    prizeNoteOwner = undefined;
     clearEligibility();
     success.showModal();
   } catch (error) {
@@ -394,7 +402,8 @@ function renderLedger(records) {
   const table = el('table');
   table.setAttribute('aria-label', '登记明细');
   const header = table.createTHead().insertRow();
-  for (const title of ['姓名', '联系电话', '校内地址', '联系微信', '获奖奖次', '所选奖次', '奖品', '状态', '登记时间']) {
+  const titles = ['姓名', '联系电话', '校内地址', '联系微信', '获奖奖次', '所选奖次', '奖品', '奖品规格备注', '状态', '登记时间'];
+  for (const title of titles) {
     const th = el('th', '', title);
     th.scope = 'col';
     header.append(th);
@@ -409,7 +418,8 @@ function renderLedger(records) {
     const cells = [
       record.name, record.phone, record.campusAddress, record.wechat, award?.name,
       waived ? '' : tier?.name, waived ? '' : prize?.name,
-      waived ? '已放弃' : '已登记领取', displayTime.format(new Date(record.createdAt)),
+      waived ? '' : record.prizeNote, waived ? '已放弃' : '已登记领取',
+      displayTime.format(new Date(record.createdAt)),
     ];
     for (const value of cells) row.insertCell().textContent = value || '—';
   }
@@ -557,18 +567,19 @@ async function restoreAttempt() {
       ? saved.prizeId === null
       : saved?.status === 'claimed' && tier?.prizes.some(prize => prize.id === saved.prizeId);
     if (!tier || !validChoice || !saved.name || !saved.phone || byId('register-view').hidden) return;
+    saved.prizeNote = typeof saved.prizeNote === 'string' ? saved.prizeNote : '';
     pendingAttempt = saved;
     fields.forEach(field => { field.input.value = saved[field.key] || ''; });
     await lookupEligibility();
     if (pendingAttempt !== saved || byId('register-view').hidden || !eligibility ||
         !eligibility.eligibleTierIds.includes(tier.id) || eligibility.name !== saved.name) return;
     if (saved.status === 'waived' && eligibility.awardTierId === tier.id &&
-        matchesAttempt({ ...claimDetails('waived'), status: 'waived', tierId: tier.id, prizeId: null })) {
+        matchesAttempt({ ...claimDetails('waived'), status: 'waived', tierId: tier.id, prizeId: null, prizeNote: '' })) {
       openWaiver();
     }
     if (saved.status === 'claimed' &&
-        matchesAttempt({ ...claimDetails('claimed'), status: 'claimed', tierId: tier.id, prizeId: saved.prizeId })) {
-      openPicker(tier);
+        matchesAttempt({ ...claimDetails('claimed'), status: 'claimed', tierId: tier.id, prizeId: saved.prizeId, prizeNote: saved.prizeNote })) {
+      openPicker(tier, saved.prizeNote);
     }
   } catch { /* The form also works without session storage. */ }
 }

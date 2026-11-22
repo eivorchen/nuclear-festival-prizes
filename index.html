@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="light">
   <title>奖品领取登记 · 核能文化节</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css?v=20261122-tiers">
-  <script type="module" src="./app.js?v=20261122-connect"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261122-prize-remark">
+  <script type="module" src="./app.js?v=20261122-prize-remark"></script>
 </head>
 <body>
   <header class="topbar">
@@ -130,6 +130,12 @@
       </div>
       <form id="prize-form">
         <fieldset id="prize-options" aria-label="可领取的奖品"></fieldset>
+        <div class="field prize-note-field">
+          <label for="prize-note">备注（选填）</label>
+          <div class="input-wrap">
+            <input id="prize-note" type="text" name="prizeNote" maxlength="100" autocomplete="off">
+          </div>
+        </div>
         <p id="picker-status" class="status-line" role="status"></p>
         <p id="submit-error" class="error" role="alert" hidden></p>
         <div class="dialog-actions">
