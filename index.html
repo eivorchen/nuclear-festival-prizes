@@ -7,8 +7,8 @@
   <meta name="color-scheme" content="light">
   <title>奖品领取登记 · 核能文化节</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css?v=20261122-notes">
-  <script type="module" src="./app.js?v=20261122-notes"></script>
+  <link rel="stylesheet" href="./styles.css?v=20261122-tiers">
+  <script type="module" src="./app.js?v=20261122-connect"></script>
 </head>
 <body>
   <header class="topbar">
@@ -164,20 +164,6 @@
       <strong id="receipt-prize"></strong>
       <button id="next" type="button" class="primary-button">完成</button>
     </div>
-  </dialog>
-
-  <dialog id="note-editor" aria-labelledby="note-editor-title">
-    <h2 id="note-editor-title">编辑备注</h2>
-    <p id="note-recipient" class="dialog-context"></p>
-    <form id="note-form">
-      <label for="note-text">备注内容</label>
-      <textarea id="note-text" rows="4" maxlength="300" aria-describedby="note-error" autofocus></textarea>
-      <p id="note-error" class="error" role="alert" hidden></p>
-      <div class="dialog-actions">
-        <button id="cancel-note" type="button" class="quiet-button">取消</button>
-        <button id="save-note" type="submit" class="primary-button">保存备注</button>
-      </div>
-    </form>
   </dialog>
 </body>
 </html>

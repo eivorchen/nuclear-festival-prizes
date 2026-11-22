@@ -1,8 +1,8 @@
 import { tiers } from './catalog.js';
 import {
   findEligibility, getAdminStats, importLegacyClaims, legacyCount, localMode,
-  loginAdmin, logoutAdmin, saveAdminNote, submitClaim,
-} from './data.js?v=20261122-notes';
+  loginAdmin, logoutAdmin, submitClaim,
+} from './data.js?v=20261122-connect';
 
 const byId = id => document.getElementById(id);
 const picker = byId('picker');
@@ -394,7 +394,7 @@ function renderLedger(records) {
   const table = el('table');
   table.setAttribute('aria-label', '登记明细');
   const header = table.createTHead().insertRow();
-  for (const title of ['姓名', '备注', '联系电话', '校内地址', '联系微信', '获奖奖次', '所选奖次', '奖品', '状态', '登记时间']) {
+  for (const title of ['姓名', '联系电话', '校内地址', '联系微信', '获奖奖次', '所选奖次', '奖品', '状态', '登记时间']) {
     const th = el('th', '', title);
     th.scope = 'col';
     header.append(th);
@@ -402,21 +402,12 @@ function renderLedger(records) {
   const body = table.createTBody();
   for (const record of records) {
     const row = body.insertRow();
-    row.insertCell().textContent = record.name;
-    const noteCell = row.insertCell();
-    noteCell.className = 'ledger-note-cell';
-    const noteButton = el('button', 'ledger-note');
-    noteButton.type = 'button';
-    noteButton.dataset.name = record.name.trim();
-    updateNoteButton(noteButton, record.note ?? '');
-    noteButton.addEventListener('click', () => openNoteEditor(noteButton));
-    noteCell.append(noteButton);
     const tier = tiersById.get(record.tierId);
     const award = tiersById.get(record.awardTierId);
     const prize = tier?.prizes.find(item => item.id === record.prizeId);
     const waived = record.status === 'waived';
     const cells = [
-      record.phone, record.campusAddress, record.wechat, award?.name,
+      record.name, record.phone, record.campusAddress, record.wechat, award?.name,
       waived ? '' : tier?.name, waived ? '' : prize?.name,
       waived ? '已放弃' : '已登记领取', displayTime.format(new Date(record.createdAt)),
     ];
@@ -425,91 +416,12 @@ function renderLedger(records) {
   ledger.append(table);
 }
 
-const noteEditor = byId('note-editor');
-const noteInput = byId('note-text');
-const noteRecipient = byId('note-recipient');
-const noteError = byId('note-error');
-const noteSave = byId('save-note');
-const noteCancel = byId('cancel-note');
-let noteEdit = null;
-
-function updateNoteButton(button, value) {
-  button.value = value;
-  button.textContent = value || '添加备注';
-  button.classList.toggle('empty-note', !value);
-  button.setAttribute('aria-label', button.dataset.name + '的备注，' + (value ? '编辑' : '添加'));
-}
-
-function setNoteSaving(saving) {
-  noteSave.disabled = saving;
-  noteSave.textContent = saving ? '保存中…' : '保存备注';
-  noteCancel.disabled = saving;
-  noteInput.readOnly = saving;
-}
-
-function clearNoteEditor() {
-  noteEdit = null;
-  if (noteEditor.open) noteEditor.close();
-  noteInput.value = '';
-  noteRecipient.textContent = '';
-  showError(noteError);
-  setNoteSaving(false);
-}
-
-function openNoteEditor(button) {
-  noteEdit = { name: button.dataset.name, previousNote: button.value };
-  noteRecipient.textContent = noteEdit.name;
-  noteInput.value = noteEdit.previousNote;
-  showError(noteError);
-  byId('stats-status').textContent = '';
-  noteEditor.showModal();
-}
-
-noteCancel.addEventListener('click', clearNoteEditor);
-noteEditor.addEventListener('cancel', event => {
-  if (noteInput.readOnly) event.preventDefault();
-});
-noteEditor.addEventListener('close', () => {
-  if (!noteEditor.open) clearNoteEditor();
-});
-byId('note-form').addEventListener('submit', async event => {
-  event.preventDefault();
-  if (!noteEdit || noteSave.disabled) return;
-  const edit = noteEdit;
-  const note = noteInput.value.trim();
-  if (note === edit.previousNote) {
-    clearNoteEditor();
-    return;
-  }
-  setNoteSaving(true);
-  showError(noteError);
-  try {
-    const result = await saveAdminNote({ ...edit, note });
-    if (noteEdit !== edit) return;
-    for (const button of byId('ledger').querySelectorAll('.ledger-note')) {
-      if (button.dataset.name === edit.name) updateNoteButton(button, result.note ?? '');
-    }
-    clearNoteEditor();
-    byId('stats-status').textContent = '备注已保存。';
-  } catch (error) {
-    if (noteEdit !== edit) return;
-    if (error.code === 'UNAUTHORIZED' || error.code === 'FORBIDDEN') {
-      showLogin('请重新登录后编辑备注。');
-    } else {
-      showError(noteError, error.code === 'NOTE_CONFLICT' ? '备注已有更新，请取消并刷新统计后再编辑。' : error.message);
-    }
-  } finally {
-    if (noteEdit === edit) setNoteSaving(false);
-  }
-});
-
 const adminLogin = byId('admin-login');
 const passwordInput = byId('admin-password');
 byId('admin-account').placeholder = localMode ? '请输入管理员账号' : '请输入管理员邮箱';
 
 function clearStats() {
   ++statsLoad;
-  clearNoteEditor();
   byId('stats-body').hidden = true;
   byId('admin-actions').hidden = true;
   byId('legacy-box').hidden = true;
