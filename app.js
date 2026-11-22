@@ -2,7 +2,7 @@ import { tiers } from './catalog.js';
 import {
   findEligibility, getAdminStats, importLegacyClaims, legacyCount, localMode,
   loginAdmin, logoutAdmin, submitClaim,
-} from './data.js?v=20261122-roster';
+} from './data.js?v=20261122-connect';
 
 const byId = id => document.getElementById(id);
 const picker = byId('picker');
@@ -189,6 +189,15 @@ function matchesAttempt(draft) {
   return pendingAttempt && Object.keys(draft).every(key => draft[key] === pendingAttempt[key]);
 }
 
+function createRequestId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
+}
+
 function rememberAttempt(attempt) {
   pendingAttempt = attempt;
   try {
@@ -302,8 +311,6 @@ async function sendSelection(confirmationToken) {
   if (submitting || (selection.status === 'claimed' && !selection.prize)) return;
   const waived = selection.status === 'waived';
   const draft = draftSelection();
-  const attempt = matchesAttempt(draft) ? pendingAttempt : { requestId: crypto.randomUUID(), ...draft };
-  rememberAttempt(attempt);
   submitting = true;
   const action = byId(confirmationToken ? 'confirm-overwrite' : waived ? 'confirm-waiver' : 'confirm');
   const actionText = action.textContent;
@@ -314,6 +321,8 @@ async function sendSelection(confirmationToken) {
   const submitError = byId(waived ? 'waiver-error' : 'submit-error');
   showError(submitError);
   try {
+    const attempt = matchesAttempt(draft) ? pendingAttempt : { requestId: createRequestId(), ...draft };
+    rememberAttempt(attempt);
     // Restoring a pending request never restores an overwrite confirmation.
     await submitClaim(confirmationToken ? { ...attempt, confirmationToken } : attempt);
     rememberAttempt(null);

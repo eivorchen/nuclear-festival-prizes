@@ -52,14 +52,28 @@ function projectUrl() {
   return url.href.replace(/\/+$/, '');
 }
 
+export async function fetchJsonWithTimeout(url, options) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const body = await response.text();
+    let data;
+    try { data = JSON.parse(body); } catch {}
+    return { ok: response.ok, status: response.status, headers: response.headers, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function request(path, body, token) {
   const endpoint = projectUrl() + path;
   const headers = { apikey: supabasePublishableKey, 'Content-Type': 'application/json' };
   if (token) headers.Authorization = 'Bearer ' + token;
   try {
-    return await fetch(endpoint, {
+    return await fetchJsonWithTimeout(endpoint, {
       method: 'POST', headers, body: JSON.stringify(body), cache: 'no-store',
-      credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(15000),
+      credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer',
     });
   } catch {
     throw new Error('暂时无法连接数据服务，请检查网络后重试。');
@@ -69,9 +83,9 @@ async function request(path, body, token) {
 export async function cloudEligibility(name) {
   const response = await request('/rest/v1/rpc/festival_lookup_award', { p_name: name });
   if (!response.ok) throw new Error('暂时无法核对获奖名单，请稍后重试。');
-  const result = await response.json();
+  const result = response.data;
   if (result === null) return null;
-  if (!Array.isArray(result.eligibleTierIds) || !result.eligibleTierIds.includes(result.awardTierId)) {
+  if (!Array.isArray(result?.eligibleTierIds) || !result.eligibleTierIds.includes(result.awardTierId)) {
     throw new Error('获奖信息格式异常，请联系活动负责人。');
   }
   return result;
@@ -84,14 +98,16 @@ export async function cloudSubmit({ requestId, name, campusAddress, wechat, tier
     p_confirmation_token: confirmationToken ?? null, p_phone: phone ?? null, p_status: status ?? null,
   });
   if (!response.ok) {
-    const detail = await response.json().catch(() => ({}));
+    const detail = response.data ?? {};
     if (response.status === 409 && detail.code === 'DUPLICATE_NAME' &&
         typeof detail.confirmationToken === 'string' && Number.isInteger(detail.matchCount) && detail.matchCount > 0) {
       throw Object.assign(errorWithCode('DUPLICATE_NAME', '你已经提交过一次，是否覆盖？'), {
         confirmationToken: detail.confirmationToken, matchCount: detail.matchCount,
       });
     }
-    if (Object.hasOwn(claimErrors, detail.message)) throw errorWithCode(detail.message, claimErrors[detail.message]);
+    if (Object.prototype.hasOwnProperty.call(claimErrors, detail.message)) {
+      throw errorWithCode(detail.message, claimErrors[detail.message]);
+    }
     throw new Error('暂时无法提交，请稍后重试。');
   }
 }
@@ -103,8 +119,8 @@ export async function cloudLogin(account, password) {
     throw errorWithCode('UNAUTHORIZED', '账号或密码不正确。');
   }
   if (!response.ok) throw new Error('登录服务暂时不可用，请稍后重试。');
-  const data = await response.json();
-  if (typeof data.access_token !== 'string' || !(Number(data.expires_in) > 0)) {
+  const data = response.data;
+  if (typeof data?.access_token !== 'string' || !(Number(data.expires_in) > 0)) {
     throw new Error('登录服务返回异常，请稍后重试。');
   }
   saveSession({ accessToken: data.access_token, expiresAt: Date.now() + Number(data.expires_in) * 1000 });
@@ -132,7 +148,7 @@ export async function cloudStats() {
     throw errorWithCode('UNAUTHORIZED', '登录已过期，请重新登录。');
   }
   if (!result.ok) throw new Error('统计暂时无法读取，请稍后重试。');
-  const data = await result.json();
+  const data = result.data;
   if (!Array.isArray(data?.records)) throw new Error('统计数据格式异常，请联系活动负责人。');
   return data;
 }

@@ -1,4 +1,6 @@
-import { cloudEligibility, cloudLogin, cloudLogout, cloudStats, cloudSubmit } from './cloud.js?v=20261122-roster';
+import {
+  cloudEligibility, cloudLogin, cloudLogout, cloudStats, cloudSubmit, fetchJsonWithTimeout,
+} from './cloud.js?v=20261122-connect';
 
 const loopback = location.hostname === 'localhost' || location.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(location.hostname);
 export const localMode = loopback && new URLSearchParams(location.search).get('backend') !== 'cloud';
@@ -6,21 +8,20 @@ export const localMode = loopback && new URLSearchParams(location.search).get('b
 async function localRequest(path, payload) {
   let response;
   try {
-    response = await fetch('./api/' + path, {
+    response = await fetchJsonWithTimeout('./api/' + path, {
       method: payload === undefined ? 'GET' : 'POST',
       headers: payload === undefined ? {} : { 'Content-Type': 'application/json' },
       body: payload === undefined ? undefined : JSON.stringify(payload),
       credentials: 'same-origin',
       cache: 'no-store',
-      signal: AbortSignal.timeout(15000),
     });
   } catch {
     throw new Error('暂时无法连接本地服务，请稍后重试。');
   }
-  if (!response.headers.get('content-type')?.includes('application/json')) {
+  if (!response.headers.get('content-type')?.includes('application/json') || response.data === undefined) {
     throw new Error('请通过本地登记服务打开页面。');
   }
-  const data = await response.json();
+  const data = response.data;
   if (!response.ok) {
     const error = Object.assign(new Error(data.message || '操作未完成，请重试。'), { code: data.code });
     if (data.code === 'DUPLICATE_NAME') {
