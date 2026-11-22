@@ -71,6 +71,9 @@ nav a:hover { color: #402f65; }
 .text-button { min-height: 44px; margin-right: -8px; padding: 4px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--violet); font-size: 14px; font-weight: 550; }
 .text-button:hover { background: #f3f0f8; }
 .tier-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 14px; }
+@media (min-width: 671px) {
+  .tier-grid:has(> :nth-child(3)) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 .tier-button { display: flex; min-height: 105px; width: 100%; align-items: center; text-align: left; gap: 18px; padding: 20px 22px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
 .tier-button:hover, .tier-button:focus-visible { border-color: #a79aba; background: #fbfafd; }
 .tier-button:active { background: #f4f2f8; }

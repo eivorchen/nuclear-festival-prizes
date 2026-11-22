@@ -96,7 +96,7 @@ function renderEligibleTiers() {
     medal.setAttribute('aria-hidden', 'true');
     medal.append(el('span', 'coin'));
     const label = el('span', 'tier-label');
-    const note = id === eligibility.awardTierId ? '原奖次' : '降一级选择';
+    const note = id === eligibility.awardTierId ? '原奖次' : '降级选择';
     label.append(el('strong', '', tier.name), el('small', '', note));
     button.append(medal, label, el('span', 'chevron'));
     button.addEventListener('click', () => {
