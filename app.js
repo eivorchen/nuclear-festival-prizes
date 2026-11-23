@@ -2,9 +2,13 @@ import { tiers } from './catalog.js?v=20261122-prize-remark';
 import {
   findEligibility, getAdminStats, importLegacyClaims, legacyCount, localMode,
   loginAdmin, logoutAdmin, submitClaim,
-} from './data.js?v=20261122-prize-remark';
+} from './data.js?v=20261123-closed';
 
 const byId = id => document.getElementById(id);
+const registrationClosed = !localMode;
+const registrationTitle = registrationClosed ? '填报已截止' : '奖品领取登记';
+byId('register-title').textContent = registrationTitle;
+byId('register-view').querySelector('.entry').hidden = registrationClosed;
 const picker = byId('picker');
 const success = byId('success');
 const prizeNoteInput = byId('prize-note');
@@ -111,6 +115,7 @@ function renderEligibleTiers() {
 }
 
 async function lookupEligibility() {
+  if (registrationClosed) return;
   const name = nameField.input.value.trim();
   if (!name) {
     clearEligibility();
@@ -314,7 +319,7 @@ byId('prize-form').addEventListener('submit', event => {
 byId('confirm-waiver').addEventListener('click', () => sendSelection());
 
 async function sendSelection(confirmationToken) {
-  if (submitting || (selection.status === 'claimed' && !selection.prize)) return;
+  if (registrationClosed || submitting || (selection.status === 'claimed' && !selection.prize)) return;
   const waived = selection.status === 'waived';
   const draft = draftSelection();
   submitting = true;
@@ -539,7 +544,7 @@ function showView() {
   byId('stats-view').hidden = !stats;
   byId('nav-' + (stats ? 'stats' : 'register')).setAttribute('aria-current', 'page');
   byId('nav-' + (stats ? 'register' : 'stats')).removeAttribute('aria-current');
-  document.title = (stats ? '领取统计' : '奖品领取登记') + ' · 核能文化节';
+  document.title = (stats ? '领取统计' : registrationTitle) + ' · 核能文化节';
   if (stats) refreshStats();
   else {
     clearStats();
@@ -584,4 +589,4 @@ async function restoreAttempt() {
   } catch { /* The form also works without session storage. */ }
 }
 
-restoreAttempt();
+if (!registrationClosed) restoreAttempt();

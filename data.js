@@ -1,6 +1,6 @@
 import {
   cloudEligibility, cloudLogin, cloudLogout, cloudStats, cloudSubmit, fetchJsonWithTimeout,
-} from './cloud.js?v=20261122-prize-remark';
+} from './cloud.js?v=20261123-closed';
 
 const loopback = location.hostname === 'localhost' || location.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(location.hostname);
 export const localMode = loopback && new URLSearchParams(location.search).get('backend') !== 'cloud';

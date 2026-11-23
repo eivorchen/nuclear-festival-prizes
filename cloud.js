@@ -11,6 +11,7 @@ const claimErrors = {
   INVALID_PRIZE_NOTE: '奖品备注请填写一行，最多 100 个字符。',
   INVALID_TIER: '该姓名不能选择这个奖次，请重新查询。',
   INVALID_STATUS: '请选择领取奖品或放弃奖品。',
+  REGISTRATION_CLOSED: '填报已截止。',
   NOT_ELIGIBLE: '名单中没有找到该姓名，请核对姓名。',
   CONTACT_MISMATCH: '已有登记。请填写原登记的联系电话，或联系活动负责人处理。',
   LEGACY_CONTACT_MISMATCH: '已有登记。请填写原登记的联系微信，或联系活动负责人处理。',
